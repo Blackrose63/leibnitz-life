@@ -1,44 +1,147 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Leibnitz Life</title>
+<link href="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css" rel="stylesheet">
 <style>
-body{margin:0;overflow:hidden;font-family:Arial;background:#87ceeb}
-#info{position:fixed;top:10px;left:10px;right:10px;color:white;background:#111b;padding:12px;border-radius:12px;z-index:2;text-align:center}
-button{font-size:18px;padding:13px;border:0;border-radius:12px;background:#fff;color:#111;margin:4px}
-#controls{position:fixed;bottom:18px;left:0;right:0;text-align:center;z-index:3}
-#move{width:145px}
+*{box-sizing:border-box}
+html,body,#map{margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui;background:#17212b}
+#map{position:absolute;inset:0}
+.hud{position:absolute;z-index:5;color:white;background:#111a24e8;border:1px solid #ffffff30;border-radius:13px;padding:10px;box-shadow:0 4px 18px #0005}
+#brand{top:12px;left:12px;font-weight:850}
+small{display:block;color:#cbd5df;font-size:11px}
+#stats{top:12px;right:12px;text-align:right;font-size:12px;line-height:1.5}
+#hint{top:76px;left:12px;font-size:11px;max-width:65%}
+#menu{left:10px;bottom:12px;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 20px)}
+button{color:white;background:#293747;border:1px solid #ffffff35;border-radius:10px;padding:10px;font-weight:700;font-size:12px}
+button.active{background:#f0c23e;color:#171717}
+#controls{position:absolute;z-index:6;right:14px;bottom:100px;width:140px;height:140px}
+.pad{position:absolute;width:44px;height:44px;font-size:18px;padding:0;background:#111a24e8}
+#up{top:0;left:48px}#down{bottom:0;left:48px}#left{left:0;top:48px}#right{right:0;top:48px}
+#player{position:absolute;z-index:4;left:50%;top:52%;transform:translate(-50%,-50%);font-size:29px;pointer-events:none}
+#toast{position:absolute;z-index:10;left:50%;bottom:250px;transform:translateX(-50%);background:#101820ed;color:white;padding:10px;border-radius:12px;font-size:12px;display:none;max-width:85%;text-align:center}
+#loading{position:absolute;z-index:20;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;background:#111b;color:white;padding:30px}
+#loading div{max-width:320px}
+#loading b{font-size:22px}
+#loading p{color:#cbd5df;font-size:13px;line-height:1.5}
 </style>
 </head>
 <body>
-<div id="info"><b>🏙️ LEIBNITZ LIFE</b><br>Gehe durch die Stadt und fahre Auto!<br><button onclick="enterCar()">🚗 Auto ein-/aussteigen</button></div>
-<div id="controls"><button onclick="move(-1,0)">⬅️</button><button onclick="move(0,1)">⬆️</button><button onclick="move(0,-1)">⬇️</button><button onclick="move(1,0)">➡️</button><button onclick="jump()">🦘</button></div>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<div id="map"></div><div id="player">🚶</div>
+<div id="brand" class="hud">LEIBNITZ LIFE<small>Echte Karte · Open World</small></div>
+<div id="stats" class="hud"><b id="modeLabel">ZU FUSS</b><br><span id="speed">0 km/h</span><br>Leibnitz, Österreich</div>
+<div id="hint" class="hud">Echte Karte wird geladen …</div>
+<div id="menu" class="hud">
+<button id="walk" class="active">🚶 Zu Fuß</button>
+<button id="drive">🚗 Auto</button>
+<button id="camera">🎥 Kamera: 3D</button>
+<button id="reset">📍 Hauptplatz</button>
+</div>
+<div id="controls">
+<button class="pad" id="up">▲</button><button class="pad" id="down">▼</button>
+<button class="pad" id="left">◀</button><button class="pad" id="right">▶</button>
+</div><div id="toast"></div>
+<div id="loading"><div><b>Leibnitz Life</b><p>Die echte Karte von Leibnitz lädt. Internetverbindung erforderlich.</p></div></div>
+<script src="https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js"></script>
 <script>
-const scene=new THREE.Scene();scene.background=new THREE.Color(0x87ceeb);
-const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,1000);
-const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
-scene.add(new THREE.HemisphereLight(0xffffff,0x668866,2));
-const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(20,40,10);scene.add(sun);
-const ground=new THREE.Mesh(new THREE.PlaneGeometry(250,250),new THREE.MeshStandardMaterial({color:0x65a85a}));ground.rotation.x=-Math.PI/2;scene.add(ground);
-const roadmat=new THREE.MeshStandardMaterial({color:0x44484d});
-function road(x,z,w,d){let m=new THREE.Mesh(new THREE.BoxGeometry(w,.08,d),roadmat);m.position.set(x,.05,z);scene.add(m)}
-road(0,0,16,220);road(0,0,220,16);
-const white=new THREE.MeshStandardMaterial({color:0xffffff});
-for(let i=-100;i<=100;i+=12){let l=new THREE.Mesh(new THREE.BoxGeometry(.25,.1,5),white);l.position.set(0,.12,i);scene.add(l);let a=l.clone();a.rotation.y=Math.PI/2;a.position.set(i,.12,0);scene.add(a)}
-for(let x=-90;x<=90;x+=20)for(let z=-90;z<=90;z+=22){if(Math.abs(x)<18||Math.abs(z)<18)continue;let h=5+Math.random()*13;let b=new THREE.Mesh(new THREE.BoxGeometry(9,h,9),new THREE.MeshStandardMaterial({color:[0xe6c8a2,0xd6dce2,0xe9e2ca,0xc4d8b5][Math.floor(Math.random()*4)]}));b.position.set(x,h/2,z);scene.add(b);let roof=new THREE.Mesh(new THREE.ConeGeometry(6,3,4),new THREE.MeshStandardMaterial({color:0x8d4a38}));roof.position.set(x,h+1,z);roof.rotation.y=Math.PI/4;scene.add(roof)}
-function makePerson(){let g=new THREE.Group();let body=new THREE.Mesh(new THREE.CapsuleGeometry(.45,.8,4,8),new THREE.MeshStandardMaterial({color:0x236bdb}));body.position.y=1;g.add(body);let head=new THREE.Mesh(new THREE.SphereGeometry(.32,12,12),new THREE.MeshStandardMaterial({color:0xffd1a4}));head.position.y=1.85;g.add(head);scene.add(g);return g}
-const player=makePerson();player.position.set(3,0,3);
-const car=new THREE.Group();const shell=new THREE.Mesh(new THREE.BoxGeometry(2.4,.8,4),new THREE.MeshStandardMaterial({color:0xe33434}));shell.position.y=.8;car.add(shell);const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.7,.7,1.8),new THREE.MeshStandardMaterial({color:0x9dd8ed}));cabin.position.set(0,1.45,-.2);car.add(cabin);for(let x of [-1.2,1.2])for(let z of [-1.25,1.25]){let w=new THREE.Mesh(new THREE.CylinderGeometry(.38,.38,.2,12),new THREE.MeshStandardMaterial({color:0x222222}));w.rotation.z=Math.PI/2;w.position.set(x,.4,z);car.add(w)}car.position.set(5,0,1);scene.add(car);
-let driving=false,speed=0;
-function move(x,z){if(driving){speed+=z*.16;car.rotation.y-=x*.12;car.position.x+=Math.sin(car.rotation.y)*speed;car.position.z+=Math.cos(car.rotation.y)*speed;speed*=.96}else{player.position.x+=x*2;player.position.z-=z*2}}
-function enterCar(){driving=!driving;if(driving)player.visible=false;else{player.visible=true;player.position.set(car.position.x+3,0,car.position.z)}}
-function jump(){if(!driving){player.position.y=2;setTimeout(()=>player.position.y=0,450)}}
-function animate(){requestAnimationFrame(animate);let target=driving?car.position:player.position;camera.position.lerp(new THREE.Vector3(target.x,target.y+7,target.z+11),.08);camera.lookAt(target.x,target.y+1,target.z);renderer.render(scene,camera)}
-addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-animate();
+(()=>{
+const start={lng:15.5386,lat:46.7814};
+const map=new maplibregl.Map({
+container:'map',
+style:'https://tiles.openfreemap.org/styles/liberty',
+center:[start.lng,start.lat],zoom:16.7,pitch:58,bearing:0
+});
+map.addControl(new maplibregl.NavigationControl({showCompass:true,showZoom:false}),'top-right');
+let mode='walk',camera3d=true,moving=null,speed=0;
+const $=id=>document.getElementById(id);
+let toastTimer;
+function toast(t){
+$('toast').textContent=t;$('toast').style.display='block';
+clearTimeout(toastTimer);
+toastTimer=setTimeout(()=>$('toast').style.display='none',2500);
+}
+function ui(){
+$('modeLabel').textContent=mode==='car'?'IM AUTO':'ZU FUSS';
+$('speed').textContent=Math.round(speed)+' km/h';
+$('player').textContent=mode==='car'?'🚗':'🚶';
+$('walk').classList.toggle('active',mode==='walk');
+$('drive').classList.toggle('active',mode==='car');
+$('camera').textContent=camera3d?'🎥 Kamera: 3D':'🎥 Kamera: oben';
+}
+map.on('load',()=>{
+try{
+if(map.getSource('openmaptiles')){
+const layers=map.getStyle().layers||[];
+const label=layers.find(l=>l.type==='symbol'&&l.layout&&l.layout['text-field']);
+map.addLayer({
+id:'leibnitz-3d-buildings',source:'openmaptiles',
+'source-layer':'building',type:'fill-extrusion',minzoom:14,
+paint:{
+'fill-extrusion-color':'#b8c1c8',
+'fill-extrusion-height':['coalesce',['get','render_height'],['get','height'],7],
+'fill-extrusion-base':['coalesce',['get','render_min_height'],['get','min_height'],0],
+'fill-extrusion-opacity':0.88
+}
+},label?label.id:undefined);
+}
+}catch(e){}
+$('loading').style.display='none';
+$('hint').textContent='Pfeile nutzen, um die Karte zu erkunden';
+toast('Willkommen in Leibnitz! Tippe auf Auto zum Fahren.');
+});
+map.on('error',()=>{
+if($('loading').style.display!=='none')
+$('loading').querySelector('p').textContent='Karte lädt nicht? Bitte Internet prüfen und Seite neu laden.';
+});
+function end(){
+if(moving){clearInterval(moving);moving=null}
+speed=0;ui();
+}
+function setMode(m){
+end();mode=m;ui();
+toast(m==='car'?'Auto-Modus: Du bewegst dich schneller.':'Du bist zu Fuß unterwegs.');
+}
+$('walk').onclick=()=>setMode('walk');
+$('drive').onclick=()=>setMode('car');
+$('camera').onclick=()=>{
+camera3d=!camera3d;
+map.easeTo({pitch:camera3d?58:0,duration:450});ui();
+};
+$('reset').onclick=()=>{
+end();
+map.flyTo({center:[start.lng,start.lat],zoom:16.7,pitch:camera3d?58:0,bearing:0,duration:700});
+toast('Zurück beim Hauptplatz Leibnitz.');
+};
+const dirs={up:[0,48],down:[0,-42],left:[48,0],right:[-48,0]};
+function begin(d){
+end();const v=dirs[d];if(!v)return;
+speed=mode==='car'?48:5;ui();
+moving=setInterval(()=>{
+const f=mode==='car'?1.65:0.45;
+map.panBy([v[0]*f,v[1]*f],{duration:90});
+},100);
+}
+['up','down','left','right'].forEach(id=>{
+const el=$(id);
+el.addEventListener('pointerdown',e=>{
+e.preventDefault();el.setPointerCapture(e.pointerId);begin(id);
+});
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>
+el.addEventListener(ev,e=>{e.preventDefault();end();})
+);
+});
+document.addEventListener('keydown',e=>{
+const k={ArrowUp:'up',w:'up',ArrowDown:'down',s:'down',ArrowLeft:'left',a:'left',ArrowRight:'right',d:'right'};
+if(k[e.key]){e.preventDefault();if(!moving)begin(k[e.key]);}
+if(e.key===' '){e.preventDefault();setMode(mode==='walk'?'car':'walk');}
+});
+document.addEventListener('keyup',e=>{
+if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key))end();
+});
+ui();
+})();
 </script>
 </body>
 </html>
